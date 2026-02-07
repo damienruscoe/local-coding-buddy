@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   orchestrator:
     build:
@@ -7,8 +5,8 @@ services:
       dockerfile: Dockerfile.orchestrator
     container_name: coding-buddy-orchestrator
     volumes:
-      #- ${PROJECT_PATH}:/workspace:rw
-      - /home/druscoe/local-coding-buddy/python-calculator:/workspace:rw
+      - ${PROJECT_PATH}:/workspace:rw
+      #- /home/druscoe/dev/local-coding-buddy/python-calculator:/workspace:rw
       - ./models:/models:ro
       - ./orchestrator:/app/orchestrator:ro
       - ./tools:/app/tools:ro
@@ -29,6 +27,7 @@ services:
     cap_add:
       - DAC_OVERRIDE
     user: "1000:1000"
+    command: ["sleep", "infinity"] # or REMOVE service entirely
 
   agent-runtime:
     build:
@@ -50,8 +49,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 8G
+          cpus: '8'
+          memory: 16G
 
 networks:
   coding-buddy-net:

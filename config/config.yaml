@@ -1,5 +1,7 @@
 # Local AI Coding Buddy Configuration
 
+project_root: /workspace
+
 # Retry behavior
 max_retries: 3
 
@@ -10,7 +12,9 @@ enable_refining: false
 coverage_threshold: 80.0
 
 # Timeouts (seconds)
-agent_timeout: 300
+default_timeout: 120
+#agent_timeout: 300
+agent_timeout: 1800
 test_timeout: 300
 
 # Model configuration

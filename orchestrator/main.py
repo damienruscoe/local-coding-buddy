@@ -1,6 +1,7 @@
 """
 Main orchestrator entry point for the Local AI Coding Buddy.
 """
+import os
 import sys
 import click
 from rich.console import Console
@@ -20,7 +21,9 @@ def cli():
 
 
 @cli.command()
-@click.option('--project', type=click.Path(exists=True), required=True,
+#@click.option('--project', type=click.Path(exists=True), required=True,
+#              help='Path to project directory')
+@click.option('--project', type=str, required=True,
               help='Path to project directory')
 @click.option('--request', type=str, required=True,
               help='Coding request description')
@@ -28,6 +31,11 @@ def cli():
               help='Automatically commit successful changes')
 def run(project: str, request: str, auto_commit: bool):
     """Execute a coding request"""
+    print("RUN INVOKED")
+    print("Project arg:", project)
+    print("CWD:", os.getcwd())
+    print("Listing /workspace:", os.listdir("/workspace"))
+
     try:
         setup_logging()
         config = ConfigLoader.load()

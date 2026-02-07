@@ -58,10 +58,18 @@ shell-agent:
 	@docker-compose exec agent-runtime /bin/bash
 
 test:
-	@echo "Running orchestrator tests..."
-	@docker-compose exec orchestrator pytest /app/orchestrator/tests/ -v || true
+	#@echo "Running orchestrator tests..."
+	#@docker-compose exec orchestrator pytest /app/orchestrator/tests/ -v || true
 	@echo "Running agent tests..."
 	@docker-compose exec agent-runtime pytest /app/agents/tests/ -v || true
+	@echo "Running agent tests v2..."
+	docker-compose exec agent-runtime pytest agents/tests || true
+	@echo "Running agent tests v1..."
+	@docker-compose run --rm orchestrator pytest || true
+	@echo "Running agent tests v2..."
+	@docker-compose run --rm orchestrator pytest /app/agents/tests/ -v || true
+	@echo "Running orchestrator tests v3..."
+	docker-compose run --rm orchestrator pytest orchestrator/tests || true
 
 status:
 	@docker-compose exec orchestrator python -m orchestrator.main status
