@@ -49,8 +49,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '8'
-          memory: 16G
+          cpus: '12'
+          memory: 32G
 
 networks:
   coding-buddy-net:

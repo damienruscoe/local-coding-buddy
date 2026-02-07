@@ -3,6 +3,7 @@ Client for communicating with agent runtime.
 """
 import requests
 import logging
+import json
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ class AgentsClient:
             prompt=self._build_implementer_prompt(task)
         )
         
-        return response['diff']
+        return response.get('text', '')
     
     def review(self, validation_result: Dict) -> Dict:
         """
@@ -97,13 +98,15 @@ class AgentsClient:
             prompt=self._build_refiner_prompt()
         )
         
-        return response['diff']
+        return response.get('text', '')
     
     def _call_agent(self, agent_type: str, prompt: str, 
                     max_tokens: int = 2048, temperature: float = 0.7) -> Dict:
         """
         Make HTTP request to agent runtime.
         """
+        logger.debug("Calling agent '%s' with prompt:\n%s", agent_type, prompt)
+
         payload = {
             'agent_type': agent_type,
             'prompt': prompt,
@@ -118,7 +121,10 @@ class AgentsClient:
                 timeout=300
             )
             response.raise_for_status()
-            return response.json()
+            
+            response_json = response.json()
+            logger.debug("Agent '%s' returned response:\n%s", agent_type, response_json.get('text', ''))
+            return response_json
             
         except requests.exceptions.RequestException as e:
             logger.error(f"Agent call failed: {e}")
@@ -126,26 +132,21 @@ class AgentsClient:
     
     def _build_architect_prompt(self, request: str, codebase_summary: Dict) -> str:
         """Build prompt for Architect agent"""
-        return f"""You are an expert software architect. Decompose this request into small, independent tasks.
+        return f"""Please decompose the following user request into a task graph.
 
-User Request: {request}
+**User Request**: {request}
 
-Codebase Summary:
+**Codebase Summary**:
 - Files: {codebase_summary['file_count']}
 - Modules: {len(codebase_summary['modules'])}
 - Build Targets: {len(codebase_summary['build_targets'])}
 
-Provide a task graph in JSON format with:
-- task_id
-- description
-- acceptance_criteria
-- dependencies
-
-Output only valid JSON."""
+Remember to follow all the instructions from your system prompt precisely. Your response must be a markdown document with a single JSON code block containing the task graph.
+"""
     
     def _build_test_author_prompt(self, task_graph: Dict) -> str:
         """Build prompt for Spec Author agent"""
-        tasks = task_graph['tasks']
+        tasks = task_graph.get('tasks', [])
         task_descriptions = "\n".join([f"- {t['description']}" for t in tasks])
         
         return f"""You are an expert test engineer. Write tests for these tasks.
@@ -201,12 +202,8 @@ Provide a unified diff with refactoring changes."""
     
     def _parse_task_graph(self, response: Dict) -> Dict:
         """Parse task graph from agent response"""
-        import json
-        
-        # Extract JSON from response
         text = response.get('text', '')
         
-        # Try to find JSON block
         try:
             # Remove markdown code blocks if present
             if '```json' in text:
@@ -217,6 +214,7 @@ Provide a unified diff with refactoring changes."""
             return json.loads(text.strip())
         except (json.JSONDecodeError, IndexError) as e:
             logger.error(f"Failed to parse task graph: {e}")
+            logger.debug("Full response text was:\n%s", text)
             # Return minimal valid structure
             return {'tasks': []}
     

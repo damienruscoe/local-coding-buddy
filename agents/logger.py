@@ -12,14 +12,14 @@ def setup_logging(log_level="INFO"):
 
     logging.basicConfig(
         level=log_level,
-        format="%(asctime)s - %(levelname)s - %(message)s",
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             RichHandler(rich_tracebacks=True, markup=True),
-            logging.FileHandler("/tmp/orchestrator.log"),
+            logging.FileHandler("/tmp/agent.log"),
         ],
     )
 
     # Suppress noisy loggers
     logging.getLogger("httpx").setLevel(logging.WARNING)
-
-    logging.info("Logging initialized")
+    
+    logging.info("Agent logging initialized")

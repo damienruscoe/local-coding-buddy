@@ -1,4 +1,4 @@
-.PHONY: help setup build up down logs shell test clean
+.PHONY: help setup build up down logs shell test clean rebuild full-cycle
 
 # Default target
 help:
@@ -21,6 +21,7 @@ help:
 	@echo "Maintenance:"
 	@echo "  make clean    - Remove containers and volumes"
 	@echo "  make rebuild  - Clean rebuild"
+	@echo "  make full-cycle - Stop, rebuild, start, and test all containers"
 
 setup:
 	@./scripts/setup.sh
@@ -80,6 +81,8 @@ clean:
 	@docker system prune -f
 
 rebuild: clean build up
+
+full-cycle: down rebuild up test
 
 # Project-specific commands (requires PROJECT_PATH in .env)
 run:

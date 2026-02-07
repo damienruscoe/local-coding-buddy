@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any
 import json
 import logging
 from datetime import datetime
+from pprint import pprint
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,8 @@ class StateMachine:
         Execute the full workflow for a coding request.
         """
         try:
-            logger.info(f"Starting workflow for request: {request}")
+            logger.info("Starting workflow for request: %s", request)
+            logger.info("Auto-commit is %s", "ENABLED" if self.auto_commit else "DISABLED")
             
             # State transitions
             self._transition_to(State.SCANNING_CODEBASE)
@@ -84,7 +86,13 @@ class StateMachine:
             
             self._transition_to(State.PLANNING)
             task_graph = self._plan(request, codebase_summary)
+            logger.info("Planned task graph:\n%s", json.dumps(task_graph, indent=2))
             
+            if not task_graph.get('tasks'):
+                logger.warning("No tasks were planned. Exiting.")
+                self._transition_to(State.DONE)
+                return ExecutionResult(success=True, metrics=self.state.metrics)
+
             self._transition_to(State.TEST_AUTHORING)
             tests = self._author_tests(task_graph)
             
@@ -101,8 +109,10 @@ class StateMachine:
                     validation_result = self._validate(code_diff, tests)
                     
                     if validation_result['passed']:
+                        logger.info("Task %s passed validation.", task['id'])
                         break
                     else:
+                        logger.warning("Task %s failed validation. Retrying...", task['id'])
                         self.state.retry_count += 1
                         if self.state.retry_count >= self.MAX_RETRIES:
                             self._transition_to(State.ROLLBACK)
@@ -129,9 +139,12 @@ class StateMachine:
             # Commit
             commit_hash = None
             if self.auto_commit:
+                logger.info("Auto-committing changes.")
                 self._transition_to(State.COMMIT)
                 commit_hash = self._commit(task_graph)
-            
+            else:
+                logger.info("Skipping auto-commit as it is disabled.")
+
             self._transition_to(State.DONE)
             
             return ExecutionResult(
@@ -141,7 +154,7 @@ class StateMachine:
             )
             
         except Exception as e:
-            logger.error(f"Workflow failed: {e}")
+            logger.error(f"Workflow failed: {e}", exc_info=True)
             self._transition_to(State.FAILED)
             return ExecutionResult(
                 success=False,
@@ -184,8 +197,10 @@ class StateMachine:
         """Run tests and quality gates"""
         from .validators import Validator
         validator = Validator(self.project_path)
-        return validator.validate(code_diff, tests)
-    
+        result = validator.validate(code_diff, tests)
+        logger.info("Validation result:\n%s", pprint.pformat(result))
+        return result
+
     def _review(self, validation_result: Dict) -> Dict:
         """Get suggestions from Reviewer agent"""
         from .agents_client import AgentsClient
@@ -200,6 +215,7 @@ class StateMachine:
     
     def _rollback(self):
         """Revert changes"""
+        logger.info("Rolling back changes.")
         from .git_interface import GitInterface
         git = GitInterface(self.project_path)
         git.rollback()
@@ -209,11 +225,14 @@ class StateMachine:
         from .git_interface import GitInterface
         git = GitInterface(self.project_path)
         message = self._generate_commit_message(task_graph)
+        logger.info("Committing with message:\n%s", message)
         return git.commit(message)
     
     def _generate_commit_message(self, task_graph: Dict) -> str:
         """Generate commit message from task metadata"""
-        tasks = task_graph['tasks']
+        tasks = task_graph.get('tasks', [])
+        if not tasks:
+            return "Automated commit: No tasks specified."
         summary = f"Implement {len(tasks)} tasks"
         details = "\n".join([f"- {t['description']}" for t in tasks])
         return f"{summary}\n\n{details}"
@@ -223,6 +242,10 @@ class StateMachine:
         state_dict = asdict(self.state)
         state_dict['current_state'] = self.state.current_state.value
         
+        # Create state directory if it doesn't exist
+        state_dir = Path(self.STATE_FILE).parent
+        state_dir.mkdir(parents=True, exist_ok=True)
+
         with open(self.STATE_FILE, 'w') as f:
             json.dump(state_dict, f, indent=2)
     
@@ -235,4 +258,7 @@ class StateMachine:
                 data['current_state'] = State(data['current_state'])
                 return WorkflowState(**data)
         except FileNotFoundError:
+            return None
+        except json.JSONDecodeError:
+            logger.error("Could not decode state file. Starting fresh.")
             return None

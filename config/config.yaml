@@ -19,7 +19,9 @@ test_timeout: 300
 
 # Model configuration
 model_path: /models/base-model.gguf
-context_size: 4096
+#context_size: 4096
+#context_size: 32768
+context_size: 131072
 max_tokens: 2048
 temperature: 0.7
 
