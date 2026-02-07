@@ -1,0 +1,27 @@
+# Local AI Coding Buddy Configuration
+
+# Retry behavior
+max_retries: 3
+
+# Feature flags
+enable_refining: false
+
+# Quality gates
+coverage_threshold: 80.0
+
+# Timeouts (seconds)
+agent_timeout: 300
+test_timeout: 300
+
+# Model configuration
+model_path: /models/base-model.gguf
+context_size: 4096
+max_tokens: 2048
+temperature: 0.7
+
+# Logging
+log_level: INFO
+
+# Git configuration
+auto_commit: false
+commit_prefix: "[coding-buddy]"

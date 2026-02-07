@@ -1,0 +1,228 @@
+"""
+Client for communicating with agent runtime.
+"""
+import requests
+import logging
+from typing import Dict, Optional
+
+logger = logging.getLogger(__name__)
+
+
+class AgentsClient:
+    """
+    Interface to the agent runtime service.
+    Handles communication with LLM-based reasoning agents.
+    """
+    
+    AGENT_RUNTIME_URL = "http://agent-runtime:8000"
+    
+    def __init__(self):
+        self.base_url = self.AGENT_RUNTIME_URL
+    
+    def plan(self, request: str, codebase_summary: Dict) -> Dict:
+        """
+        Call Architect agent to decompose request into tasks.
+        
+        Returns:
+            Task graph with acceptance criteria
+        """
+        logger.info("Calling Architect agent for planning")
+        
+        response = self._call_agent(
+            agent_type="architect",
+            prompt=self._build_architect_prompt(request, codebase_summary)
+        )
+        
+        return self._parse_task_graph(response)
+    
+    def author_tests(self, task_graph: Dict) -> Dict:
+        """
+        Call Spec Author agent to generate tests.
+        
+        Returns:
+            Test definitions
+        """
+        logger.info("Calling Spec Author agent for test generation")
+        
+        response = self._call_agent(
+            agent_type="spec_author",
+            prompt=self._build_test_author_prompt(task_graph)
+        )
+        
+        return self._parse_tests(response)
+    
+    def implement(self, task: Dict) -> str:
+        """
+        Call Implementer agent to generate code.
+        
+        Returns:
+            Code diff
+        """
+        logger.info(f"Calling Implementer agent for task: {task['id']}")
+        
+        response = self._call_agent(
+            agent_type="implementer",
+            prompt=self._build_implementer_prompt(task)
+        )
+        
+        return response['diff']
+    
+    def review(self, validation_result: Dict) -> Dict:
+        """
+        Call Reviewer agent for failure analysis.
+        
+        Returns:
+            Suggestions for fixes
+        """
+        logger.info("Calling Reviewer agent for analysis")
+        
+        response = self._call_agent(
+            agent_type="reviewer",
+            prompt=self._build_reviewer_prompt(validation_result)
+        )
+        
+        return response
+    
+    def refine(self) -> str:
+        """
+        Call Refiner agent for code improvement.
+        
+        Returns:
+            Refined code diff
+        """
+        logger.info("Calling Refiner agent for refactoring")
+        
+        response = self._call_agent(
+            agent_type="refiner",
+            prompt=self._build_refiner_prompt()
+        )
+        
+        return response['diff']
+    
+    def _call_agent(self, agent_type: str, prompt: str, 
+                    max_tokens: int = 2048, temperature: float = 0.7) -> Dict:
+        """
+        Make HTTP request to agent runtime.
+        """
+        payload = {
+            'agent_type': agent_type,
+            'prompt': prompt,
+            'max_tokens': max_tokens,
+            'temperature': temperature
+        }
+        
+        try:
+            response = requests.post(
+                f"{self.base_url}/generate",
+                json=payload,
+                timeout=300
+            )
+            response.raise_for_status()
+            return response.json()
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Agent call failed: {e}")
+            raise
+    
+    def _build_architect_prompt(self, request: str, codebase_summary: Dict) -> str:
+        """Build prompt for Architect agent"""
+        return f"""You are an expert software architect. Decompose this request into small, independent tasks.
+
+User Request: {request}
+
+Codebase Summary:
+- Files: {codebase_summary['file_count']}
+- Modules: {len(codebase_summary['modules'])}
+- Build Targets: {len(codebase_summary['build_targets'])}
+
+Provide a task graph in JSON format with:
+- task_id
+- description
+- acceptance_criteria
+- dependencies
+
+Output only valid JSON."""
+    
+    def _build_test_author_prompt(self, task_graph: Dict) -> str:
+        """Build prompt for Spec Author agent"""
+        tasks = task_graph['tasks']
+        task_descriptions = "\n".join([f"- {t['description']}" for t in tasks])
+        
+        return f"""You are an expert test engineer. Write tests for these tasks.
+
+Tasks:
+{task_descriptions}
+
+Generate test cases covering:
+- Happy path
+- Edge cases
+- Error conditions
+
+Output test code in appropriate format (pytest/googletest)."""
+    
+    def _build_implementer_prompt(self, task: Dict) -> str:
+        """Build prompt for Implementer agent"""
+        return f"""You are an expert software engineer. Implement this task.
+
+Task: {task['description']}
+
+Acceptance Criteria:
+{chr(10).join([f"- {c}" for c in task['acceptance_criteria']])}
+
+Context:
+{task.get('context', 'No additional context')}
+
+Provide a unified diff that implements this task.
+Include only the minimal necessary changes."""
+    
+    def _build_reviewer_prompt(self, validation_result: Dict) -> str:
+        """Build prompt for Reviewer agent"""
+        failures = validation_result.get('failures', [])
+        
+        return f"""You are an expert code reviewer. Analyze these test failures and suggest fixes.
+
+Test Failures:
+{chr(10).join([f"- {f}" for f in failures])}
+
+Coverage: {validation_result.get('coverage', 'N/A')}%
+
+Suggest specific corrective actions or recommend rollback."""
+    
+    def _build_refiner_prompt(self) -> str:
+        """Build prompt for Refiner agent"""
+        return """You are an expert in code refactoring. Improve the code structure without changing behavior.
+
+Focus on:
+- Naming clarity
+- Function decomposition
+- Code organization
+
+Provide a unified diff with refactoring changes."""
+    
+    def _parse_task_graph(self, response: Dict) -> Dict:
+        """Parse task graph from agent response"""
+        import json
+        
+        # Extract JSON from response
+        text = response.get('text', '')
+        
+        # Try to find JSON block
+        try:
+            # Remove markdown code blocks if present
+            if '```json' in text:
+                text = text.split('```json')[1].split('```')[0]
+            elif '```' in text:
+                text = text.split('```')[1].split('```')[0]
+            
+            return json.loads(text.strip())
+        except (json.JSONDecodeError, IndexError) as e:
+            logger.error(f"Failed to parse task graph: {e}")
+            # Return minimal valid structure
+            return {'tasks': []}
+    
+    def _parse_tests(self, response: Dict) -> Dict:
+        """Parse test definitions from agent response"""
+        return {
+            'test_code': response.get('text', ''),
+            'test_count': response.get('metadata', {}).get('test_count', 0)
+        }

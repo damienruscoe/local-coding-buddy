@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.orchestrator
+    container_name: coding-buddy-orchestrator
+    volumes:
+      #- ${PROJECT_PATH}:/workspace:rw
+      - /home/druscoe/local-coding-buddy/python-calculator:/workspace:rw
+      - ./models:/models:ro
+      - ./orchestrator:/app/orchestrator:ro
+      - ./tools:/app/tools:ro
+      - ./config:/app/config:ro
+      - state:/state
+    environment:
+      - PROJECT_PATH_INTERNAL=/workspace
+      - STATE_PATH=/state
+      - MODELS_PATH=/models
+    networks:
+      - coding-buddy-net
+    stdin_open: true
+    tty: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_OVERRIDE
+    user: "1000:1000"
+
+  agent-runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: coding-buddy-agent
+    volumes:
+      - ./models:/models:ro
+      - ./agents:/app/agents:ro
+    environment:
+      - MODELS_PATH=/models
+    networks:
+      - coding-buddy-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: "1000:1000"
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+
+networks:
+  coding-buddy-net:
+    driver: bridge
+    internal: true
+
+volumes:
+  models:
+    driver: local
+  state:
+    driver: local

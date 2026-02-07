@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+# Install llama.cpp dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    cmake \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements-agent.txt /tmp/
+RUN pip install --no-cache-dir -r /tmp/requirements-agent.txt
+
+# Install llama-cpp-python
+RUN pip install --no-cache-dir llama-cpp-python
+
+# Create non-root user
+RUN useradd -m -u 1000 -s /bin/bash buddy
+
+# Set working directory
+WORKDIR /app
+
+# Copy agent code
+COPY agents /app/agents
+
+USER buddy
+
+CMD ["python", "-m", "agents.runtime"]
