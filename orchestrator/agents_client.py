@@ -147,19 +147,30 @@ Remember to follow all the instructions from your system prompt precisely. Your 
     def _build_test_author_prompt(self, task_graph: Dict) -> str:
         """Build prompt for Spec Author agent"""
         tasks = task_graph.get('tasks', [])
+        language = task_graph.get("language")
         task_descriptions = "\n".join([f"- {t['description']}" for t in tasks])
-        
-        return f"""You are an expert test engineer. Write tests for these tasks.
 
-Tasks:
+        if not language:
+            logger.warning("Language not found in task graph. Test generation might be inaccurate.")
+            language_prompt = "You need to infer the language from the tasks."
+        else:
+            language_prompt = f"The tasks are for a {language} project. Please write tests in {language}."
+
+        return f"""You are an expert test engineer. Your mission is to write a robust suite of tests based on the provided tasks.
+
+{language_prompt}
+
+**Tasks to be Tested:**
 {task_descriptions}
 
-Generate test cases covering:
-- Happy path
-- Edge cases
-- Error conditions
+**Instructions:**
+Your generated tests must adhere to all the guidelines in your system prompt, including:
+- Creating robust tests that match the complexity of the unit under test.
+- Commenting on key happy-path tests to serve as documentation.
+- Using data-driven tests where it improves clarity and reduces duplication.
 
-Output test code in appropriate format (pytest/googletest)."""
+Generate a complete test file with all necessary imports and boilerplate.
+"""
     
     def _build_implementer_prompt(self, task: Dict) -> str:
         """Build prompt for Implementer agent"""
