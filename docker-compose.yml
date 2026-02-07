@@ -9,7 +9,6 @@ services:
       #- /home/druscoe/dev/local-coding-buddy/python-calculator:/workspace:rw
       - ./models:/models:ro
       - ./orchestrator:/app/orchestrator:ro
-      - ./tools:/app/tools:ro
       - ./config:/app/config:ro
       - state:/state
     environment:

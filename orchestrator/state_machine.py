@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any
 import json
 import logging
 from datetime import datetime
-from pprint import pprint
+from pprint import pformat
 
 logger = logging.getLogger(__name__)
 
@@ -198,7 +198,7 @@ class StateMachine:
         from .validators import Validator
         validator = Validator(self.project_path)
         result = validator.validate(code_diff, tests)
-        logger.info("Validation result:\n%s", pprint.pformat(result))
+        logger.info("Validation result:\n%s", pformat(result))
         return result
 
     def _review(self, validation_result: Dict) -> Dict:

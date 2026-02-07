@@ -25,7 +25,6 @@ WORKDIR /app
 
 # Copy application code
 COPY orchestrator /app/orchestrator
-COPY tools /app/tools
 COPY config /app/config
 
 # Create state directory
