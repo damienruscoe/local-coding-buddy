@@ -1,6 +1,7 @@
 """
 Validation and quality gate enforcement.
 """
+from typing import Optional, Dict, Any
 import subprocess
 import logging
 from pathlib import Path
@@ -28,6 +29,7 @@ class Validator:
             {
                 'passed': bool,
                 'failures': List[str],
+                'is_patch_failure': Optional[bool], # Added for feedback loop
                 'coverage': float,
                 'lint_issues': List[str]
             }
@@ -35,49 +37,58 @@ class Validator:
         logger.info("Starting validation")
         
         # Apply diff
-        self._apply_diff(code_diff)
+        patch_error = self._apply_diff(code_diff)
+        if patch_error:
+            return {
+                'passed': False,
+                'failures': [patch_error],
+                'is_patch_failure': True,
+                'coverage': 0.0,
+                'lint_issues': []
+            }
         
-        result = {
-            'passed': True,
-            'failures': [],
-            'coverage': 0.0,
-            'lint_issues': []
-        }
+        all_failures = []
         
         try:
-            # Run tests
+            # Run tests and get coverage
             test_result = self._run_tests()
-            result['failures'] = test_result['failures']
+            test_failures = test_result.get('failures', [])
+            coverage = test_result.get('coverage', 0.0)
             
-            if test_result['failures']:
-                result['passed'] = False
-                return result
+            all_failures.extend(test_failures)
             
             # Check coverage
-            coverage = self._check_coverage()
-            result['coverage'] = coverage
-            
             if coverage < 80.0:  # Configurable threshold
-                result['passed'] = False
-                result['failures'].append(f"Coverage {coverage}% below threshold 80%")
+                all_failures.append(f"Coverage {coverage}% below threshold 80%")
             
             # Run linters
             lint_issues = self._run_linters()
-            result['lint_issues'] = lint_issues
-            
-            if lint_issues:
-                result['passed'] = False
-                result['failures'].extend(lint_issues)
+            all_failures.extend(lint_issues)
+
+            return {
+                'passed': not all_failures,
+                'failures': all_failures,
+                'is_patch_failure': False, # Not a patch failure if we got here
+                'coverage': coverage,
+                'lint_issues': lint_issues
+            }
             
         except Exception as e:
-            logger.error(f"Validation failed: {e}")
-            result['passed'] = False
-            result['failures'].append(str(e))
-        
-        return result
+            logger.error(f"Validation failed: {e}", exc_info=True)
+            return {
+                'passed': False,
+                'failures': [f"Validation suite internal error: {e}"],
+                'is_patch_failure': False,
+                'coverage': 0.0,
+                'lint_issues': []
+            }
     
-    def _apply_diff(self, diff: str):
-        """Apply unified diff to project"""
+    def _apply_diff(self, diff: str) -> Optional[str]:
+        """
+        Apply unified diff to project.
+        Returns an error string on failure, or None on success.
+        """
+        patch_file = None
         try:
             # Write diff to temp file
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.patch') as f:
@@ -85,58 +96,76 @@ class Validator:
                 patch_file = f.name
             
             # Apply patch
-            subprocess.run(
+            result = subprocess.run(
                 ['patch', '-p1', '-i', patch_file],
                 cwd=self.project_path,
-                check=True,
-                capture_output=True,
+                capture_output=True, # Capture output even on success
                 timeout=30
             )
             
-            os.unlink(patch_file)
-            logger.info("Diff applied successfully")
+            if result.returncode != 0:
+                error_message = f"Failed to apply diff: {result.stderr.decode().strip()}"
+                logger.error(error_message)
+                return error_message
             
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to apply diff: {e.stderr.decode()}")
-            raise
+            logger.info("Diff applied successfully")
+            return None # Success
+            
+        except subprocess.TimeoutExpired:
+            return "Patch application timed out after 30 seconds."
+        except Exception as e:
+            logger.error(f"Unexpected error during diff application: {e}", exc_info=True)
+            return f"Unexpected error during diff application: {e}"
+        finally:
+            if patch_file and os.path.exists(patch_file):
+                os.unlink(patch_file)
     
     def _run_tests(self) -> Dict:
-        """Run test suite"""
-        failures = []
-        
+        """Run test suite and return results including coverage."""
         # Detect test framework
         if (self.project_path / 'pytest.ini').exists() or \
            any(self.project_path.glob('test_*.py')):
-            failures = self._run_pytest()
+            return self._run_pytest_with_coverage()
         
         elif (self.project_path / 'CMakeLists.txt').exists():
             failures = self._run_ctest()
+            # C++ coverage is not yet implemented, as noted in future_work.md
+            return {'failures': failures, 'coverage': 0.0}
         
-        return {'failures': failures}
-    
-    def _run_pytest(self) -> List[str]:
-        """Run pytest"""
+        return {'failures': [], 'coverage': 0.0}
+
+    def _run_pytest_with_coverage(self) -> Dict:
+        """Run pytest with coverage and return results."""
         try:
+            command = [
+                'pytest',
+                '-v',
+                '--tb=short',
+                '--cov=.',
+                '--cov-report=term'
+            ]
             result = subprocess.run(
-                ['pytest', '-v', '--tb=short'],
+                command,
                 cwd=self.project_path,
                 capture_output=True,
                 timeout=300
             )
             
+            output = result.stdout.decode()
+            failures = []
+            # Pytest exit codes: 0 = all passed, 1 = tests failed, >1 = usage error
             if result.returncode != 0:
-                # Parse failures from output
-                output = result.stdout.decode()
                 failures = self._parse_pytest_failures(output)
-                return failures
+
+            coverage = self._parse_coverage(output)
             
-            return []
-            
+            return {'failures': failures, 'coverage': coverage}
+
         except subprocess.TimeoutExpired:
-            return ["Tests timed out after 5 minutes"]
+            return {'failures': ["Tests timed out after 5 minutes"], 'coverage': 0.0}
         except Exception as e:
-            return [f"Test execution failed: {e}"]
-    
+            return {'failures': [f"Test execution failed: {e}"], 'coverage': 0.0}
+
     def _run_ctest(self) -> List[str]:
         """Run CTest (for C++ projects)"""
         try:
@@ -180,26 +209,6 @@ class Validator:
             return [f"Build/test failed: {e.stderr.decode()}"]
         except subprocess.TimeoutExpired:
             return ["Build/test timed out"]
-    
-    def _check_coverage(self) -> float:
-        """Measure code coverage"""
-        try:
-            # Run pytest with coverage
-            result = subprocess.run(
-                ['pytest', '--cov=.', '--cov-report=term'],
-                cwd=self.project_path,
-                capture_output=True,
-                timeout=300
-            )
-            
-            # Parse coverage from output
-            output = result.stdout.decode()
-            coverage = self._parse_coverage(output)
-            return coverage
-            
-        except Exception as e:
-            logger.warning(f"Coverage check failed: {e}")
-            return 0.0
     
     def _run_linters(self) -> List[str]:
         """Run static analysis"""

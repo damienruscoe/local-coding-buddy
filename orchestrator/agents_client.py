@@ -174,7 +174,35 @@ Generate a complete test file with all necessary imports and boilerplate.
     
     def _build_implementer_prompt(self, task: Dict) -> str:
         """Build prompt for Implementer agent"""
-        return f"""You are an expert software engineer. Implement this task.
+        feedback_context = task.get('feedback')
+
+        if feedback_context:
+            # This is a retry after a patch application failure
+            return f"""You are an expert software engineer specializing in fixing diff application errors.
+Your previous attempt to generate a diff for the following task failed to apply to the codebase.
+
+**Original Task:** {task['description']}
+
+**Acceptance Criteria:**
+{chr(10).join([f"- {c}" for c in task['acceptance_criteria']])}
+
+**Error Message from the `patch` command:**
+{feedback_context['patch_error']}
+
+**Your Previously Generated Broken Diff:**
+```diff
+{feedback_context['broken_diff']}
+```
+
+**Instructions:**
+Analyze the error message and the original task. The error likely indicates that the context lines in your previous diff were incorrect, or you tried to modify a file that didn't exist (or vice-versa).
+
+Generate a **new, corrected unified diff** that addresses the error and successfully implements the original task. Pay close attention to the existing file structure and content.
+Include only the minimal necessary changes.
+"""
+        else:
+            # This is the first attempt
+            return f"""You are an expert software engineer. Implement this task.
 
 Task: {task['description']}
 

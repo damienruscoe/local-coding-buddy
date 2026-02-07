@@ -108,11 +108,26 @@ class StateMachine:
                     self._transition_to(State.VALIDATING)
                     validation_result = self._validate(code_diff, tests)
                     
+                    if validation_result.get('is_patch_failure'):
+                        logger.warning("Patch application failed for task %s. Adding feedback and retrying...", task['id'])
+                        self.state.retry_count += 1
+                        if self.state.retry_count >= self.MAX_RETRIES:
+                            self._transition_to(State.ROLLBACK)
+                            self._rollback()
+                            raise Exception(f"Task {task['id']} failed to apply patch after {self.MAX_RETRIES} retries")
+                        
+                        task['feedback'] = {
+                            'patch_error': validation_result['failures'][0],
+                            'broken_diff': code_diff
+                        }
+                        # Continue the while loop to retry with the new context
+                        continue
+                    
                     if validation_result['passed']:
                         logger.info("Task %s passed validation.", task['id'])
                         break
                     else:
-                        logger.warning("Task %s failed validation. Retrying...", task['id'])
+                        logger.warning("Task %s failed validation (non-patch-related). Retrying...", task['id'])
                         self.state.retry_count += 1
                         if self.state.retry_count >= self.MAX_RETRIES:
                             self._transition_to(State.ROLLBACK)

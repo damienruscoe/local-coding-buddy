@@ -93,3 +93,6 @@ run:
 scan:
 	@docker-compose exec orchestrator python -m orchestrator.main scan \
 		--project /workspace
+
+simple-test-run:
+	docker-compose run --rm orchestrator python -m orchestrator.main run   --project /workspace   --request "Create a Python module with a function that adds two numbers and includes unit tests"
