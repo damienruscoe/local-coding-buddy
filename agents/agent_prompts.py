@@ -65,30 +65,39 @@ SPEC_AUTHOR_PROMPT = """You are an expert test engineer. Your role is to write c
 -   Clarity: Tests should be easy to understand for other developers.
 """
 
-IMPLEMENTER_PROMPT = """You are an expert software engineer. Your role is to implement specific tasks with minimal, focused changes.
+IMPLEMENTER_PROMPT = """You are an expert software engineer. Your role is to implement specific tasks by generating a clean, correct, and minimal unified diff.
 
-Guidelines:
-- Implement ONLY what is specified in the task
-- Write clean, readable code
-- Follow language idioms and best practices
-- Make minimal necessary changes
-- Do NOT refactor beyond scope
-- Do NOT write tests (tests are provided separately)
+**CRITICAL INSTRUCTIONS:**
 
-Output:
-Provide a unified diff that implements the task.
+1.  **Analyze Context**: You will be provided with the current content of relevant files or an indication that a file needs to be created. You MUST use this context to generate a valid diff.
+2.  **Generate Correct Unified Diffs**:
+    -   Your output MUST be a **pure unified diff**. Do NOT include any comments, introductory text, blank lines, or any other content outside the strict diff format. The diff MUST start directly with `---`.
+    -   For **modifying** an existing file, your diff must accurately reflect changes relative to the provided file content, with correct context lines (`-`, `+`, and ` ` lines) to apply cleanly.
+    -   For **creating** a new file, you must use the standard "new file" diff format, beginning with `--- /dev/null`.
+    -   If implementing changes across **multiple files**, concatenate their individual unified diffs directly, one after another, without any intervening comments or blank lines.
+3.  **Minimal Changes**: Implement ONLY what is specified in the task. Do not refactor or make changes outside the scope of the request.
+4.  **No Tests**: Do not write tests. They are provided separately.
 
-**How to Create a New File:**
-To create a new file named `path/to/file.py`, provide a diff in the following format:
+**EXAMPLE: Creating a New File (`new_file.py`)**
 ```diff
 --- /dev/null
-+++ b/path/to/file.py
-@@ -0,0 +1,5 @@
-+Line 1 of the new file.
-+Line 2 of the new file.
-+...
-+Line 5 of the new file.
-```"""
++++ b/new_file.py
+@@ -0,0 +1,3 @@
++def greet(name):
++    return f"Hello, {name}!"
+```
+
+**EXAMPLE: Modifying an Existing File (`existing_file.py`)**
+*(Assume `existing_file.py` contains `print("Start")` and `print("End")`)*
+```diff
+--- a/existing_file.py
++++ b/existing_file.py
+@@ -1,2 +1,3 @@
+ print("Start")
++print("Middle")
+ print("End")
+```
+"""
 
 REVIEWER_PROMPT = """You are an expert code reviewer. Your role is to analyze test failures and suggest specific fixes.
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional, Dict, Any
 import json
+import re
 import logging
 from datetime import datetime
 from pprint import pformat
@@ -109,7 +110,29 @@ class StateMachine:
                     validation_result = self._validate(code_diff, tests)
                     
                     if validation_result.get('is_patch_failure'):
-                        logger.warning("Patch application failed for task %s. Adding feedback and retrying...", task['id'])
+                        logger.warning("Patch application failed for task %s. Gathering context and retrying...", task['id'])
+                        
+                        # --- CONTEXT GATHERING LOGIC FOR ALL FILES ---
+                        file_contexts_for_feedback = []
+                        # Parse all file headers from the diff
+                        file_headers = re.findall(r'^\+\+\+\s+b/(?P<filename>\S+)', code_diff, re.MULTILINE)
+                        
+                        for filename in file_headers:
+                            target_file = self.project_path / filename
+                            file_info = {'filename': filename}
+                            
+                            if target_file.exists():
+                                content = target_file.read_text()
+                                file_info['exists'] = True
+                                file_info['content'] = content
+                                file_info['num_lines'] = len(content.splitlines())
+                            else:
+                                file_info['exists'] = False
+                                file_info['content'] = "(File does not exist)"
+                                file_info['num_lines'] = 0
+                                
+                            file_contexts_for_feedback.append(file_info)
+
                         self.state.retry_count += 1
                         if self.state.retry_count >= self.MAX_RETRIES:
                             self._transition_to(State.ROLLBACK)
@@ -118,7 +141,8 @@ class StateMachine:
                         
                         task['feedback'] = {
                             'patch_error': validation_result['failures'][0],
-                            'broken_diff': code_diff
+                            'broken_diff': code_diff,
+                            'file_contexts': file_contexts_for_feedback
                         }
                         # Continue the while loop to retry with the new context
                         continue
