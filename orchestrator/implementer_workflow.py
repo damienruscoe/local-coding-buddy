@@ -97,36 +97,20 @@ class ImplementerStage:
 
             logger.debug(f"V4A patch:\n{patch_output}")
             
-            # Step 4: Validate patch (dry run)
-            dry_run_result = self.patch_applier.apply_patch(
+            # Step 4: Apply patch for real
+            apply_result = self.patch_applier.apply_patch(
                 patch_output,
-                dry_run=True
+                dry_run=False
             )
-            logger.debug(f"Dry run patch application result: {dry_run_result}")
+            logger.debug(f"Actual patch application result: {apply_result}")
             
-            if dry_run_result['success']:
-                # Step 5: Apply patch for real
-                apply_result = self.patch_applier.apply_patch(
-                    patch_output,
-                    dry_run=False
-                )
-                logger.debug(f"Actual patch application result: {apply_result}")
-                
-                return {
-                    'success': True,
-                    'attempt': attempt + 1,
-                    'context_strategy': context.strategy,
-                    'operations': apply_result['operations']
-                }
-            else:
-                logger.warning(f"Dry run failed on attempt {attempt + 1}. Errors: {dry_run_result.get('errors')}")
-                # Retry with feedback
-                implementer_input = self._prepare_retry_input(
-                    implementer_input,
-                    patch_output,
-                    dry_run_result
-                )
-        
+            return {
+                'success': True,
+                'attempt': attempt + 1,
+                'context_strategy': context.strategy,
+                'operations': apply_result['operations']
+            }
+    
         # All retries failed
         logger.error(f"All {self.max_retries} attempts failed for implementer stage. Last error: {dry_run_result.get('errors', ['Unknown error'])}")
         return {

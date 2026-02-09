@@ -107,7 +107,7 @@ class V4APatchParser:
         while i < len(lines):
             line = lines[i].strip()
             
-            if line.startswith('*** Add File:'):
+            if line.startswith('*** Add File:') or line.startswith('*** Create File:'):
                 hunk, next_i = self._parse_add_hunk(lines, i)
                 hunks.append(hunk)
                 i = next_i
@@ -127,8 +127,8 @@ class V4APatchParser:
                 hunks.append(hunk)
                 i = next_i
             
-            elif line.startswith('*** End Patch'):
-                break
+            #elif line.startswith('*** End Patch'):
+            #    break
             
             else:
                 i += 1
@@ -250,6 +250,10 @@ class V4APatchParser:
         ), start + 1
 
 
+def parse(patch_text: str):
+    parser = V4APatchParser()
+    return parser.parse(patch_text)
+
 class V4APatchApplier:
     """
     Apply V4A patches with robust matching strategies.
@@ -268,7 +272,6 @@ class V4APatchApplier:
             verbose: Print detailed matching information
         """
         self.verbose = verbose
-        self.parser = V4APatchParser()
         logger.setLevel(logging.DEBUG)
         logger.debug(f"V4APatchApplier initialized with verbose={verbose}. Logger level set to DEBUG.")
     
@@ -290,12 +293,13 @@ class V4APatchApplier:
         }
         
         try:
-            hunks = self.parser.parse(patch_text)
+            hunks = parse(patch_text)
         except Exception as e:
             results['success'] = False
             results['errors'].append(f"Parse error: {e}")
             return results
         
+        logger.debug(f"cwd: {os.getcwd()}")
         logger.debug(f"Number of V4A hunks: {len(hunks)}")
         for index, hunk in enumerate(hunks):
             logger.debug(f"Applying V4A hunk {index}:\n{hunk.file_path}")
@@ -340,7 +344,7 @@ class V4APatchApplier:
         
         if not dry_run:
             # Create parent directories if needed
-            os.makedirs(os.path.dirname(hunk.file_path), exist_ok=True)
+            # os.makedirs(os.path.dirname(hunk.file_path), exist_ok=True)
             
             with open(hunk.file_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(hunk.added_lines))
@@ -590,8 +594,7 @@ def validate_patch(patch_text: str) -> Tuple[bool, Optional[str]]:
         (is_valid, error_message)
     """
     try:
-        parser = V4APatchParser()
-        parser.parse(patch_text)
+        parse(patch_text)
         return True, None
     except Exception as e:
         return False, str(e)

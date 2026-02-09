@@ -28,6 +28,53 @@ def farewell(name):
         return f.name
 
 
+DAMO = '''*** Begin Patch
+*** Create File: my_module.py
++def add_two_numbers(a, b):
++    """Add two numbers."""
++    if not (isinstance(a, (int, float)) and isinstance(b, (int, float))):
++        raise TypeError("Both inputs must be numbers.")
++    return a + b
+*** End Patch
+
+*** Begin Patch
+*** Create File: test_my_module.py
++import pytest
++from my_module import add_two_numbers
++
++@pytest.mark.parametrize(
++    'test_input,expected',
++    [
++        (2, 3, 5),
++        (5, 2, 7),
++        (0, 0, 0),
++        (-1, 1, 0),
++        (-1, 1, 0),
++        (-1.1, 1.1, 0.0),
++        (5.5, -3.3, 2.2),
++        (3, "hello", pytest.raises(TypeError)),
++        ("hello", 3, pytest.raises(TypeError)),
++    ],
++)
++def test_add_two_numbers(test_input, expected):
++    assert add_two_numbers(test_input[0], test_input[1]) == expected
+*** End Patch'''
+
+def test_parse_DAMO():
+    parser = V4APatchParser()
+    hunks = parser.parse(DAMO)
+    
+    assert len(hunks) == 2
+
+    assert hunks[0].action == V4AAction.ADD
+    assert hunks[0].file_path == 'my_module.py'
+    assert len(hunks[0].added_lines) == 5
+
+    assert hunks[1].action == V4AAction.ADD
+    assert hunks[1].file_path == 'test_my_module.py'
+    assert len(hunks[1].added_lines) == 19
+
+
 def test_parse_add_patch():
     """Test parsing Add File patches."""
     patch = '''*** Begin Patch
