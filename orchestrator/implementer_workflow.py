@@ -6,9 +6,12 @@ Integrates context extraction and V4A patch application into the workflow.
 
 import os
 import yaml
+import logging
 from typing import Dict, Optional
 from .context_extractor import ContextExtractor, ExtractionStrategy, FileContext
 from .v4a_patch import V4APatchApplier, ApplyResult
+
+logger = logging.getLogger(__name__)
 
 
 class ImplementerStage:
@@ -79,6 +82,7 @@ class ImplementerStage:
                 prompt=prompt
             )
             raw_output = response_data.get('text', '')
+            logger.debug(f"Implementer Agent raw output: \n{raw_output}")
 
             # Extract the patch content, ignoring conversational text and markdown.
             try:
@@ -86,15 +90,19 @@ class ImplementerStage:
                 end_index = raw_output.rindex('*** End Patch') + len('*** End Patch')
                 patch_output = raw_output[start_index:end_index]
             except ValueError:
+                logger.warning("V4A patch delimiters not found in agent output. Attempting to use full output as patch.")
                 # Delimiters not found. The response is probably an error or invalid.
                 # Pass the raw output to the applier, which will fail and report an error.
                 patch_output = raw_output
+
+            logger.debug(f"V4A patch:\n{patch_output}")
             
             # Step 4: Validate patch (dry run)
             dry_run_result = self.patch_applier.apply_patch(
                 patch_output,
                 dry_run=True
             )
+            logger.debug(f"Dry run patch application result: {dry_run_result}")
             
             if dry_run_result['success']:
                 # Step 5: Apply patch for real
@@ -102,6 +110,7 @@ class ImplementerStage:
                     patch_output,
                     dry_run=False
                 )
+                logger.debug(f"Actual patch application result: {apply_result}")
                 
                 return {
                     'success': True,
@@ -110,6 +119,7 @@ class ImplementerStage:
                     'operations': apply_result['operations']
                 }
             else:
+                logger.warning(f"Dry run failed on attempt {attempt + 1}. Errors: {dry_run_result.get('errors')}")
                 # Retry with feedback
                 implementer_input = self._prepare_retry_input(
                     implementer_input,
@@ -118,6 +128,7 @@ class ImplementerStage:
                 )
         
         # All retries failed
+        logger.error(f"All {self.max_retries} attempts failed for implementer stage. Last error: {dry_run_result.get('errors', ['Unknown error'])}")
         return {
             'success': False,
             'attempts': self.max_retries,

@@ -8,6 +8,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+def write_file(file_path, contents):
+    with open(file_path, 'w') as f:
+        f.write(contents)
+
 class RequestHistory:
     """
     Manages the history of requests made to agents.
@@ -19,53 +23,37 @@ class RequestHistory:
         self._setup_workflow_dir()
 
     def _setup_workflow_dir(self):
-        """
-        Creates the base and workflow directories.
-        """
         try:
-            self.base_dir.mkdir(parents=True, exist_ok=True)
-            workflow_name = str(int(time.time()))
-            self.workflow_dir = self.base_dir / workflow_name
-            self.workflow_dir.mkdir()
+            self.workflow_dir = self.base_dir / str(int(time.time()))
+            self.workflow_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"Created request history directory for current workflow: {self.workflow_dir}")
         except OSError as e:
             logger.error(f"Failed to create request history directory: {e}")
-            self.workflow_dir = None
+
+    def _check(self, direction: str):
+        if not self.workflow_dir:
+            logger.error(f"Request history directory not available. Skipping saving {direction}.")
+            return False
+        return True
+
+    def _save(self, agent_name: str, direction: str, prompt: str):
+        if not self._check(direction):
+            return
+
+        file_name = f"{self.call_index:03d}_{agent_name}_{direction}.txt"
+        file_path = self.workflow_dir / file_name
+        try:
+            write_file(file_path, prompt)
+            logger.info(f"Saved request to {file_path}")
+        except IOError as e:
+            logger.error(f"Failed to save {direction} to file: {e}")
 
     def save_request(self, agent_name: str, prompt: str):
-        """
-        Saves a request to a file.
-        """
-        if not self.workflow_dir:
-            logger.error("Request history directory not available. Skipping saving request.")
-            return
-
         self.call_index += 1
-        file_name = f"{self.call_index:03d}_{agent_name}_request.txt"
-        try:
-            file_path = self.workflow_dir / file_name
-            with open(file_path, 'w') as f:
-                f.write(prompt)
-            logger.info(f"Saved request to {file_path}")
-        except IOError as e:
-            logger.error(f"Failed to save request to file: {e}")
+        self._save(agent_name, 'request', prompt)
 
     def save_response(self, agent_name: str, prompt: str):
-        """
-        Saves a response to a file.
-        """
-        if not self.workflow_dir:
-            logger.error("Request history directory not available. Skipping saving response.")
-            return
-
-        file_name = f"{self.call_index:03d}_{agent_name}_response.txt"
-        try:
-            file_path = self.workflow_dir / file_name
-            with open(file_path, 'w') as f:
-                f.write(prompt)
-            logger.info(f"Saved request to {file_path}")
-        except IOError as e:
-            logger.error(f"Failed to save response to file: {e}")
+        self._save(agent_name, 'response', prompt)
 
     def read_request(self, file_path: str) -> str:
         """

@@ -22,10 +22,12 @@ Advantages over traditional diffs:
 
 import os
 import re
+import logging
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
+logger = logging.getLogger(__name__)
 
 class V4AAction(Enum):
     """V4A patch action types."""
@@ -258,7 +260,7 @@ class V4APatchApplier:
     3. Context-header based search
     """
     
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = True):
         """
         Initialize applier.
         
@@ -267,6 +269,8 @@ class V4APatchApplier:
         """
         self.verbose = verbose
         self.parser = V4APatchParser()
+        logger.setLevel(logging.DEBUG)
+        logger.debug(f"V4APatchApplier initialized with verbose={verbose}. Logger level set to DEBUG.")
     
     def apply_patch(self, patch_text: str, dry_run: bool = False) -> Dict:
         """
@@ -292,7 +296,9 @@ class V4APatchApplier:
             results['errors'].append(f"Parse error: {e}")
             return results
         
-        for hunk in hunks:
+        logger.debug(f"Number of V4A hunks: {len(hunks)}")
+        for index, hunk in enumerate(hunks):
+            logger.debug(f"Applying V4A hunk {index}:\n{hunk.file_path}")
             try:
                 if hunk.action == V4AAction.ADD:
                     result = self._apply_add(hunk, dry_run)
@@ -330,6 +336,7 @@ class V4APatchApplier:
                 file_path=hunk.file_path,
                 error='File already exists'
             )
+        logger.debug(f"Hunk added lines:\n{hunk.added_lines}")
         
         if not dry_run:
             # Create parent directories if needed
