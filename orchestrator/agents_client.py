@@ -52,36 +52,7 @@ class AgentsClient:
         
         return self._parse_tests(response)
     
-    def implement(self, task: Dict) -> str:
-        """Call Implementer agent to generate code."""
-        logger.info(f"Calling Implementer agent for task: {task['id']}")
-        
-        response = self._call_agent(
-            agent_type="implementer",
-            prompt=self._build_implementer_prompt(task)
-        )
-        
-        raw_text = response.get('text', '')
-        
-        # The implementer can sometimes wrap the diff in markdown.
-        # We need to extract just the raw diff.
-        if '```diff' in raw_text:
-            try:
-                return raw_text.split('```diff')[1].split('```')[0].strip()
-            except IndexError:
-                # Fallback for malformed markdown
-                pass
-        
-        if '```' in raw_text:
-            try:
-                # Generic fallback for any fenced code block
-                return raw_text.split('```')[1].split('```')[0].strip()
-            except IndexError:
-                pass
 
-        # If no markers are found, assume the whole response is the diff
-        return raw_text.strip()
-    
     def review(self, validation_result: Dict) -> Dict:
         """
         Call Reviewer agent for failure analysis.
@@ -186,94 +157,7 @@ Your generated tests must adhere to all the guidelines in your system prompt, in
 Generate a complete test file with all necessary imports and boilerplate.
 """
     
-    def _build_implementer_prompt(self, task: Dict) -> str:
-        """Build prompt for Implementer agent"""
-        feedback_context = task.get('feedback')
-        suggestions = task.get('suggestions')
 
-        # Base instructions for diff formatting
-        diff_formatting_instructions = """
-**CRITICAL INSTRUCTIONS FOR DIFF FORMATTING:**
--   Your output MUST be a **pure unified diff**. Do NOT include any comments, introductory text, blank lines, or any other content outside the strict diff format. The diff MUST start directly with `---`.
--   If implementing changes across **multiple files**, concatenate their individual unified diffs directly, one after another, without any intervening comments or blank lines.
-"""
-
-        # Prioritize patch failure feedback if present, otherwise use reviewer suggestions
-        if feedback_context:
-            # This is a retry after a patch application failure
-            file_contexts = feedback_context.get('file_contexts', [])
-            
-            file_context_str = ""
-            if file_contexts:
-                file_context_str += "**Context for files relevant to this failed patch:**\n"
-                for file_info in file_contexts:
-                    file_context_str += f"- File: `{file_info['filename']}`\n"
-                    if file_info['exists']:
-                        file_context_str += f"  - Status: EXISTS, {file_info['num_lines']} lines\n"
-                        file_context_str += "  --- START FILE CONTENT ---\n"
-                        file_context_str += f"{file_info['content']}\n"
-                        file_context_str += "  --- END FILE CONTENT ---\n"
-                    else:
-                        file_context_str += "  - Status: DOES NOT EXIST (You should create it with the correct diff format)\n"
-            else:
-                file_context_str = "Could not automatically determine files relevant to this patch failure."
-
-            return f"""You are an expert software engineer specializing in fixing diff application errors.
-Your previous attempt to generate a diff for the following task failed to apply to the codebase.
-
-**Original Task:** {task['description']}
-
-**Acceptance Criteria:**
-{chr(10).join([f"- {c}" for c in task['acceptance_criteria']])}
-
-**Error Message from the `patch` command:**
-{feedback_context['patch_error']}
-
-{file_context_str}
-
-**Your Previously Generated Broken Diff:**
-```diff
-{feedback_context['broken_diff']}
-```
-{diff_formatting_instructions}
-**Instructions:**
-Analyze the error message, the actual file content (if provided), and the original task. The `patch` error, combined with the file's current state, should tell you exactly what is wrong.
-
-Generate a **new, corrected unified diff** that fixes the problem.
-- If the file exists, ensure your diff's context lines (`-`, `+`, ` `) EXACTLY match the provided file content.
-- If the file does not exist, ensure you are using the correct "new file" diff format.
-Include only the minimal necessary changes.
-"""
-        elif suggestions:
-            # This is a retry after general validation failure with reviewer suggestions
-            return f"""You are an expert software engineer. Your previous implementation for the following task failed validation.
-
-**Original Task:** {task['description']}
-
-**Acceptance Criteria:**
-{chr(10).join([f"- {c}" for c in task['acceptance_criteria']])}
-
-**Reviewer Suggestions for Improvement:**
-{chr(10).join([f"- {s}" for s in suggestions])}
-{diff_formatting_instructions}
-**Instructions:**
-Based on the reviewer's feedback, provide a new unified diff to correct the implementation.
-Include only the minimal necessary changes to address the suggestions.
-"""
-        else:
-            # This is the first attempt
-            return f"""You are an expert software engineer. Implement this task.
-
-Task: {task['description']}
-
-Acceptance Criteria:
-{chr(10).join([f"- {c}" for c in task['acceptance_criteria']])}
-
-Context:
-{task.get('context', 'No additional context')}
-{diff_formatting_instructions}
-Provide a unified diff that implements this task.
-Include only the minimal necessary changes."""
     
     def _build_reviewer_prompt(self, validation_result: Dict) -> str:
         """Build prompt for Reviewer agent"""

@@ -1,33 +1,76 @@
-# Local AI Coding Buddy Configuration
+# Local Coding Buddy Configuration
 
-project_root: /workspace
+# ============================================================================
+# CONTEXT EXTRACTION STRATEGY
+# ============================================================================
+# Choose which strategy to use for extracting code context
+# 
+# Available strategies:
+#   - tree_sitter: Language-agnostic using tree-sitter (RECOMMENDED)
+#   - ast: Python-specific using AST (most accurate for Python only)
+#   - heuristic: Fast regex-based (works for any language, less precise)
+#
+# To switch strategies, change this value:
+context_extraction_strategy: "tree_sitter"
 
-# Retry behavior
+# Maximum lines of context to include per section
+max_context_lines: 50
+
+# Files smaller than this are sent in full (bytes)
+small_file_threshold: 5120  # 5KB
+
+# ============================================================================
+# PATCH APPLICATION SETTINGS
+# ============================================================================
+# Enable verbose output for patch matching
+patch_verbose: false
+
+# ============================================================================
+# ORCHESTRATOR SETTINGS
+# ============================================================================
+# Maximum retry attempts per task
 max_retries: 3
 
-# Feature flags
+# Enable code refining stage (optional cleanup)
 enable_refining: false
 
-# Quality gates
+# Minimum test coverage percentage required
 coverage_threshold: 80.0
 
-# Timeouts (seconds)
-default_timeout: 120
-#agent_timeout: 300
-agent_timeout: 1800
+# Agent call timeout (seconds)
+agent_timeout: 300
+
+# Test execution timeout (seconds)
 test_timeout: 300
 
-# Model configuration
-model_path: /models/base-model.gguf
-#context_size: 4096
-#context_size: 32768
-context_size: 131072
-max_tokens: 2048
-temperature: 0.7
-
-# Logging
-log_level: INFO
-
-# Git configuration
+# Auto-commit successful changes to git
 auto_commit: false
-commit_prefix: "[coding-buddy]"
+
+# ============================================================================
+# AGENT RUNTIME SETTINGS
+# ============================================================================
+# Model path
+model_path: "/models/base-model.gguf"
+
+# Context size for model
+context_size: 4096
+
+# Temperature for generation
+temperature: 0.2
+
+# ============================================================================
+# PROJECT SETTINGS
+# ============================================================================
+# Supported languages
+supported_languages:
+  - python
+  - cpp
+
+# Test frameworks
+test_frameworks:
+  python:
+    - pytest
+    - unittest
+  cpp:
+    - googletest
+    - ctest

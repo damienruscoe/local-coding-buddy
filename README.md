@@ -1,284 +1,371 @@
-# Local AI Coding Buddy
+# Local AI Coding Buddy - Enhanced Edition
 
-A fully autonomous local AI coding assistant built from small models, deterministic tooling, and strict orchestration.
+A fully autonomous local AI coding assistant with **robust context extraction** and **industry-standard V4A patch format**.
 
-## Overview
+## 🎯 What's New in This Version
 
-This system acts as a local "coding buddy" for C++ and Python projects, supporting both greenfield development and iterative work on existing codebases while preserving full developer control and visibility.
+### 1. **Intelligent Context Extraction** (No More Sending Entire Files!)
+- **Three extraction strategies** you can switch with one line of code:
+  - **Tree-sitter** (recommended): Language-agnostic, works for Python & C++
+  - **AST**: Python-specific, most accurate for Python files
+  - **Heuristic**: Fast regex-based, works for any language
 
-## Architecture
+- **Smart context selection**: Only sends relevant code sections to the LLM
+- **Deterministic**: No LLM needed for extraction - fast and predictable
+- **Keyword matching**: Finds code related to the task automatically
 
-The system consists of three layers:
+### 2. **V4A Patch Format** (No More Line Number Hell!)
+- Uses **OpenAI's V4A format** - the same format GPT models are trained on
+- **Context-based matching**: Uses function/class names, not brittle line numbers
+- **Layered matching strategies**:
+  1. Exact match
+  2. Fuzzy match (handles whitespace differences)
+  3. Context-header search (finds code within specific classes/functions)
 
-1. **Host Layer** — Developer-owned project workspace
-2. **Infrastructure Layer** — Orchestration, tooling, execution (containerized)
-3. **Agent Layer** — LLM-based reasoning components (containerized)
+- **Detailed error feedback**: When a patch fails, get suggestions for similar code
+- **Validation before apply**: Dry-run mode catches issues before modifying files
 
-### Key Components
+### 3. **Easy Strategy Switching**
+Change extraction strategy with **one line** in `config/config.yaml`:
+```yaml
+context_extraction_strategy: "tree_sitter"  # or "ast" or "heuristic"
+```
 
-- **Orchestrator**: Python-based workflow engine with deterministic state machine
-- **Agent Runtime**: FastAPI service hosting LLM inference via llama.cpp
-- **Tool Executors**: Sandboxed test runners and build systems
-- **Codebase Scanner**: Non-LLM static analysis for existing projects
-- **Git Interface**: Version control integration with automatic rollback
+## 🚀 Quick Start
 
-### Agent Types
-
-1. **Architect** - Decomposes requests into tasks
-2. **Spec Author** - Generates tests from acceptance criteria
-3. **Implementer** - Writes code to pass tests
-4. **Reviewer** - Analyzes failures and suggests fixes
-5. **Refiner** - Improves code structure (optional)
-
-## Prerequisites
-
-- Docker and docker-compose
-- 8GB+ RAM (for model inference)
-- 20GB+ disk space
-- Git
-
-## Quick Start
-
-### 1. Clone and Setup
+### Installation
 
 ```bash
+# Clone repository
 git clone <repository-url>
-cd local-coding-buddy
-./scripts/setup.sh
+cd local-coding-buddy-updated
+
+# Install dependencies
+pip install -r requirements-orchestrator.txt
+
+# Configure
+cp config/config.yaml.example config/config.yaml
+# Edit config/config.yaml - set your preferences
 ```
 
-### 2. Download a Model
-
-Download a GGUF model and place it in `models/base-model.gguf`:
-
-**Recommended models:**
-- [CodeLlama-7B-GGUF](https://huggingface.co/TheBloke/CodeLlama-7B-GGUF)
-- [Mistral-7B-Instruct-GGUF](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.2-GGUF)
+### Try the Examples
 
 ```bash
-# Example download (CodeLlama 7B, Q4 quantization)
-wget https://huggingface.co/TheBloke/CodeLlama-7B-GGUF/resolve/main/codellama-7b.Q4_K_M.gguf \
-  -O models/base-model.gguf
+# Compare all three context extraction strategies
+python examples/compare_strategies.py
+
+# See V4A patch format in action
+python examples/v4a_patch_examples.py
 ```
 
-### 3. Configure Your Project
+## 📖 How It Works
 
-Edit `.env`:
-
-```bash
-cp .env.example .env
-# Edit PROJECT_PATH to point to your project
-```
-
-### 4. Start the System
-
-```bash
-docker-compose up -d
-```
-
-### 5. Run a Task
-
-```bash
-# Run a coding request
-docker-compose exec orchestrator python -m orchestrator.main run \
-  --project /workspace \
-  --request "Add a function to calculate Fibonacci numbers with tests"
-
-# Check status
-docker-compose exec orchestrator python -m orchestrator.main status
-
-# Scan existing codebase
-docker-compose exec orchestrator python -m orchestrator.main scan \
-  --project /workspace
-```
-
-## Workflow
-
-The system follows this workflow for each request:
+### Context Extraction Flow
 
 ```
-USER REQUEST
- ↓
-ARCHITECT (creates task graph)
- ↓
-SPEC AUTHOR (generates tests)
- ↓
-FOR EACH TASK:
-   ↓
-IMPLEMENTER (writes code)
-   ↓
-BUILD + TEST
-   ├─ FAIL → REVIEWER → IMPLEMENTER (retry)
-   ├─ FAIL LIMIT → REVERT
-   ↓
-REFINER (optional cleanup)
-   ↓
-FINAL BUILD + TEST
-   ↓
-GIT COMMIT (if auto-commit enabled)
+User Request: "Add fibonacci function"
+    ↓
+Context Extractor (configurable strategy)
+    ↓
+Extracts relevant code sections:
+  - Functions matching keywords ("fibonacci")
+  - Related classes/modules
+  - Surrounding context (5-10 lines)
+    ↓
+Sends ONLY relevant code to LLM
+(Not entire 1000-line file!)
 ```
 
-## Configuration
+### V4A Patch Application Flow
 
-Edit `config/config.yaml` to customize:
+```
+LLM generates V4A patch
+    ↓
+Parse patch into structured operations
+    ↓
+Validate (dry-run)
+    ├─ Success → Apply for real
+    └─ Failure → Detailed error + suggestions
+           ↓
+       Retry with feedback
+```
+
+## 🎨 Usage Examples
+
+### Example 1: Using Context Extractor Directly
+
+```python
+from orchestrator.context_extractor import extract_context
+
+# Extract context for a task
+context = extract_context(
+    file_path="my_module.py",
+    task_description="Add a fibonacci function",
+    strategy="tree_sitter"  # Easy to switch!
+)
+
+print(f"Strategy used: {context.strategy}")
+print(f"Found symbols: {context.all_symbols}")
+print(f"Relevant sections: {len(context.relevant_sections)}")
+```
+
+### Example 2: Applying V4A Patches
+
+```python
+from orchestrator.v4a_patch import V4APatchApplier
+
+patch = '''*** Begin Patch
+*** Update File: calculator.py
+@@ class Calculator @@
+ class Calculator:
+     def add(self, a, b):
+-        return a + b
++        """Add two numbers with logging."""
++        result = a + b
++        print(f"Adding {a} + {b} = {result}")
++        return result
+*** End Patch
+'''
+
+applier = V4APatchApplier(verbose=True)
+result = applier.apply_patch(patch)
+
+if result['success']:
+    print("Patch applied successfully!")
+else:
+    print(f"Errors: {result['errors']}")
+    print(f"Suggestions: {result['operations'][0].suggestions}")
+```
+
+### Example 3: Complete Workflow
+
+```python
+from orchestrator.implementer_workflow import run_implementer_stage
+
+task = {
+    'description': 'Add error handling to the divide function',
+    'acceptance_criteria': ['Handle division by zero', 'Return None on error']
+}
+
+result = run_implementer_stage(
+    task=task,
+    file_path='calculator.py',
+    agents_client=my_agent_client
+)
+
+print(f"Success: {result['success']}")
+print(f"Attempts: {result['attempt']}")
+print(f"Strategy: {result['context_strategy']}")
+```
+
+## 🔧 Configuration
+
+### config/config.yaml
 
 ```yaml
-max_retries: 3              # Max retry attempts per task
-enable_refining: false      # Enable refactoring stage
-coverage_threshold: 80.0    # Minimum test coverage %
-agent_timeout: 300          # Agent call timeout (seconds)
-test_timeout: 300          # Test execution timeout
-auto_commit: false         # Auto-commit successful changes
+# STRATEGY SELECTION (change this one line!)
+context_extraction_strategy: "tree_sitter"  # tree_sitter | ast | heuristic
+
+# Context settings
+max_context_lines: 50
+small_file_threshold: 5120  # Files <5KB sent in full
+
+# Patch settings
+patch_verbose: false  # Enable for debugging
+
+# Workflow settings
+max_retries: 3
+enable_refining: false
+coverage_threshold: 80.0
 ```
 
-## Project Structure
+## 📊 Strategy Comparison
 
-```
-local-coding-buddy/
-├── orchestrator/          # Workflow orchestration
-│   ├── main.py           # CLI entry point
-│   ├── state_machine.py  # State management
-│   ├── scanner.py        # Codebase analyzer
-│   ├── agents_client.py  # Agent communication
-│   ├── validators.py     # Test runners & quality gates
-│   └── git_interface.py  # Version control
-├── agents/               # LLM runtime
-│   ├── runtime.py        # FastAPI server
-│   ├── model_loader.py   # llama.cpp wrapper
-│   └── agent_prompts.py  # System prompts
-├── config/              # Configuration files
-├── scripts/             # Setup and utilities
-├── docker-compose.yml   # Container orchestration
-└── README.md           # This file
-```
+| Strategy | Languages | Accuracy | Speed | Dependencies |
+|----------|-----------|----------|-------|--------------|
+| **tree_sitter** | Python, C++ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | tree-sitter libs |
+| **ast** | Python only | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | Built-in |
+| **heuristic** | Any | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | None |
 
-## Supported Languages & Frameworks
+**Recommendation**: Use `tree_sitter` for most cases. It's language-agnostic and highly accurate.
 
-### Languages
-- Python 3.8+
-- C++11+
+## 🎯 Key Improvements Over Original
 
-### Test Frameworks
-- Python: pytest, unittest
-- C++: googletest, CTest
+### Problem 1: Context Explosion
+**Before**: Send entire file to LLM (1000+ lines)
+**After**: Send only 50-100 lines of relevant code
 
-## Limitations
+### Problem 2: Line Numbers Don't Work
+**Before**: LLM generates `@@ -0,0 +1,5 @@` but meant `@@ -0,0 +1,3 @@`
+**After**: V4A format uses code context: `@@ class MyClass @@`
 
-By design, this system:
-- Does NOT perform autonomous long-term planning
-- Does NOT self-modify infrastructure code
-- Does NOT redesign large system architectures
-- Operates only on local code (no network by default)
+### Problem 3: No Context for Implementer
+**Before**: Implementer doesn't know if file exists or where to insert code
+**After**: Rich context includes file existence, symbols, and insertion points
 
-These are intentional constraints for safety and predictability.
+### Problem 4: Brittle Patch Application
+**Before**: `patch` command fails on minor differences
+**After**: Layered matching (exact → fuzzy → context-based)
 
-## Troubleshooting
+### Problem 5: Hard to Debug
+**Before**: "Malformed patch" with no hints
+**After**: Detailed suggestions showing similar code locations
 
-### Model won't load
-- Check that `models/base-model.gguf` exists
-- Verify file size (should be 3-7GB for 7B models)
-- Check container logs: `docker-compose logs agent-runtime`
+## 🧪 Testing
 
-### Tests failing
-- Ensure project has proper test structure
-- Check test framework is installed in container
-- Review logs: `docker-compose logs orchestrator`
-
-### Out of memory
-- Reduce model size (use smaller quantization)
-- Reduce `context_size` in config
-- Increase Docker memory limit
-
-### Permission errors
-- Check `CONTAINER_USER_ID` and `CONTAINER_GROUP_ID` in `.env`
-- Ensure they match your host user ID: `id -u` and `id -g`
-
-## Development
-
-### Running Tests
+Run the example scripts to see everything in action:
 
 ```bash
-# Orchestrator tests
-docker-compose exec orchestrator pytest /app/orchestrator/tests/
+# Test context extraction
+python examples/compare_strategies.py
 
-# Agent runtime tests
-docker-compose exec agent-runtime pytest /app/agents/tests/
+# Test V4A patches
+python examples/v4a_patch_examples.py
+
+# Run unit tests
+pytest orchestrator/tests/
 ```
 
-### Viewing Logs
+## 🏗️ Architecture
 
+```
+orchestrator/
+├── context_extractor.py       # Three extraction strategies
+├── v4a_patch.py               # V4A parser and applier
+├── implementer_workflow.py    # Integration layer
+└── tests/                     # Unit tests
+
+config/
+└── config.yaml                # Easy strategy switching
+
+examples/
+├── compare_strategies.py      # Compare extraction methods
+└── v4a_patch_examples.py      # V4A format examples
+```
+
+## 🔍 How Context Extraction Works
+
+### Tree-sitter Strategy (Recommended)
+```python
+# Uses tree-sitter to parse code
+tree = parser.parse(content)
+
+# Find all functions/classes
+symbols = extract_symbols(tree)
+
+# Match to task keywords
+relevant = match_keywords(symbols, "fibonacci")
+
+# Extract with surrounding context
+return context_sections
+```
+
+### AST Strategy (Python)
+```python
+# Parse Python AST
+tree = ast.parse(content)
+
+# Walk AST nodes
+for node in ast.walk(tree):
+    if isinstance(node, ast.FunctionDef):
+        # Extract function details
+        symbols.append(...)
+
+# Match and extract context
+```
+
+### Heuristic Strategy (Fallback)
+```python
+# Simple regex matching
+for line in lines:
+    if keyword in line:
+        # Extract surrounding lines
+        context = lines[i-10:i+10]
+```
+
+## 🎓 Best Practices
+
+### 1. Choose the Right Strategy
+- **Python projects**: `ast` (most accurate)
+- **Multi-language**: `tree_sitter` (supports Python + C++)
+- **Quick prototyping**: `heuristic` (no dependencies)
+
+### 2. Tune Context Size
+```yaml
+# More context = better accuracy, higher token cost
+max_context_lines: 50  # Default: good balance
+
+# For complex refactors
+max_context_lines: 100
+
+# For simple changes
+max_context_lines: 25
+```
+
+### 3. Use Validation
+```python
+# Always validate patches before applying
+result = applier.apply_patch(patch, dry_run=True)
+
+if result['success']:
+    # Safe to apply
+    applier.apply_patch(patch, dry_run=False)
+else:
+    # Review errors and retry
+    handle_errors(result)
+```
+
+### 4. Enable Verbose Mode for Debugging
+```yaml
+patch_verbose: true  # See detailed matching info
+```
+
+## 🐛 Troubleshooting
+
+### "Tree-sitter not found"
 ```bash
-# All logs
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f orchestrator
-docker-compose logs -f agent-runtime
+pip install tree-sitter tree-sitter-python tree-sitter-cpp
 ```
 
-### Rebuilding
+### "Could not locate code to replace"
+- Check the V4A patch format is correct
+- Enable `patch_verbose: true` to see matching attempts
+- Review suggestions in error output
+- Ensure context headers match actual code
 
-```bash
-# Rebuild after code changes
-docker-compose build
-
-# Force rebuild without cache
-docker-compose build --no-cache
+### "Strategy X failed"
+```yaml
+# Switch to fallback strategy
+context_extraction_strategy: "heuristic"
 ```
 
-## Security
+## 📚 Additional Resources
 
-The system includes several security measures:
+- **V4A Format Spec**: See `orchestrator/v4a_patch.py` docstring
+- **Context Extraction**: See `orchestrator/context_extractor.py` docstring
+- **Examples**: `examples/` directory
 
-- Containers run as non-root user
-- No outbound network by default
-- Resource limits (CPU/memory)
-- Sandboxed execution
-- Explicit file access allowlists
-
-## Performance Tips
-
-1. **Use quantized models**: Q4 or Q5 quantization balances quality and speed
-2. **Adjust context size**: Smaller contexts = faster inference
-3. **Enable refining selectively**: Adds overhead but improves code quality
-4. **Set appropriate timeouts**: Balance patience vs. responsiveness
-
-## Observability
-
-The system logs to:
-- `/state/orchestrator.log` (workflow events)
-- Docker logs (container output)
-- `/state/workflow_state.json` (current state)
-
-Metrics tracked:
-- Task success rate
-- Retry count per task
-- Test execution time
-- Coverage percentage
-
-## Contributing
-
-This is an implementation of the design specified in:
-- `local_coding_buddy_full_autonomous_system_architecture_infrastructure_agents.md`
-- `local_ai_coding_buddy_complete_agentic_workflow_specification.md`
+## 🤝 Contributing
 
 When contributing:
-1. Follow the architectural principles (LLMs propose, tools decide)
-2. Keep infrastructure deterministic
-3. Maintain separation of concerns
-4. Add tests for new functionality
+1. Follow existing code structure
+2. Add tests for new features
+3. Update documentation
+4. Run `black` for formatting
 
-## License
+## 📝 License
 
 [Your chosen license]
 
-## Support
+## 🎉 Summary
 
-For issues, questions, or contributions:
-- Open an issue on GitHub
-- Review existing documentation
-- Check logs for error details
+This enhanced version solves the core problems:
+1. ✅ **No more sending entire files** - intelligent context extraction
+2. ✅ **No more line number errors** - V4A format uses code context
+3. ✅ **Easy to switch strategies** - one line of config
+4. ✅ **Robust patch application** - layered matching with fallbacks
+5. ✅ **Detailed error feedback** - suggestions when patches fail
 
-## Acknowledgments
+The implementer agent now has the context it needs, and the infrastructure can reliably apply its output.
 
-This system is designed to be **boring, strict, observable, and reliable** — the traits required for local AI to be trusted in production environments.
+**Ready to use!** 🚀
