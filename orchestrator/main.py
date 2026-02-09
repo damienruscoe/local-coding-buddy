@@ -1,15 +1,15 @@
-"""
-Main orchestrator entry point for the Local AI Coding Buddy.
-"""
 import os
 import sys
 import click
 import logging
+import uuid
 from pathlib import Path
+from typing import Optional
 
 from .state_machine import StateMachine
 from .config_loader import ConfigLoader
-from .logger import setup_logging
+from .logger import setup_logging, set_workflow_id, clear_workflow_id
+from .request_history import RequestHistory
 
 
 @click.group()
@@ -21,14 +21,18 @@ def cli():
 @cli.command()
 @click.option('--project', type=str, required=True,
               help='Path to project directory')
-@click.option('--request', type=str, required=True,
+@click.option('--request', type=str,
               help='Coding request description')
+@click.option('--replay-from', type=str,
+              help='Path to a saved request file to replay')
 @click.option('--auto-commit/--no-auto-commit', default=False,
               help='Automatically commit successful changes')
-def run(project: str, request: str, auto_commit: bool):
+def run(project: str, request: Optional[str], replay_from: Optional[str], auto_commit: bool):
     """Execute a coding request"""
+    workflow_id = str(uuid.uuid4())
+    set_workflow_id(workflow_id)
     setup_logging('DEBUG')
-    logging.info("RUN INVOKED")
+    logging.info(f"RUN INVOKED (Workflow ID: {workflow_id})")
     logging.info("Project arg: %s", project)
     logging.info("CWD: %s", os.getcwd())
     try:
@@ -38,7 +42,20 @@ def run(project: str, request: str, auto_commit: bool):
 
     try:
         config = ConfigLoader.load()
+
+        # Handle replay functionality
+        if replay_from:
+            request_history = RequestHistory()
+            request = request_history.read_request(replay_from)
+            if not request:
+                logging.error(f"[bold red]✗ Failed to read request from replay file: {replay_from}[/bold red]")
+                sys.exit(1)
+            logging.info(f"[bold yellow]Replaying request from: {replay_from}[/bold yellow]")
         
+        if not request:
+            logging.error("[bold red]✗ No request provided. Use --request or --replay-from.[/bold red]")
+            sys.exit(1)
+
         logging.info("[bold blue]Starting coding buddy...[/bold blue]")
         logging.info(f"Project: {project}")
         logging.info(f"Request: {request}")
@@ -62,6 +79,8 @@ def run(project: str, request: str, auto_commit: bool):
     except Exception as e:
         logging.error(f"[bold red]Error: {e}[/bold red]", exc_info=True)
         sys.exit(1)
+    finally:
+        clear_workflow_id()
 
 
 @cli.command()

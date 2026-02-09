@@ -5,6 +5,7 @@ import requests
 import logging
 import json
 from typing import Dict, Optional
+from orchestrator.request_history import RequestHistory
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class AgentsClient:
     
     def __init__(self):
         self.base_url = self.AGENT_RUNTIME_URL
+        self.request_history = RequestHistory()
     
     def plan(self, request: str, codebase_summary: Dict) -> Dict:
         """
@@ -100,6 +102,7 @@ class AgentsClient:
         }
         
         try:
+            self.request_history.save_request(agent_type, prompt)
             response = requests.post(
                 f"{self.base_url}/generate",
                 json=payload,
@@ -108,6 +111,7 @@ class AgentsClient:
             response.raise_for_status()
             
             response_json = response.json()
+            self.request_history.save_response(agent_type, response_json.get('text', ''))
             logger.debug("Agent '%s' returned response:\n%s", agent_type, response_json.get('text', ''))
             return response_json
             
